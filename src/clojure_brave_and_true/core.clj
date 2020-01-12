@@ -3,12 +3,13 @@
   (:require [clj-http.client :as client]
             [clojure.data.json :as json]
             [clojure.string :as string]
-            [clojure.core.reducers :as r]))
+            [clojure.core.reducers :as r]
+            [clojure-brave-and-true.keywords :as word]))
 
 ;; Pending features
 ;; Topic based
 ;; Send notification
-;; modularize namepsace
+;; modularize namespace
 
 
 (defn fetchTopUrls [n]
@@ -18,11 +19,11 @@
       (take n (map #(str endpoint "item/" % ".json")
                     (into [] (re-seq #"[0-9]+" (:body resp))))))))
 
-(def fp-words ["haskell" "clojure" "scala" "lisp" "scheme" "elixir" "erlang" "F#"])
+;;(def fp-words ["haskell" "clojure" "scala" "lisp" "scheme" "elixir" "erlang" "F#"])
 
-(defn isFunNews?
-  [title]
-  (let [words fp-words]
+(defn isNewsMatched?
+  [title match-words]
+  (let [words match-words]
     (reduce (fn [res w]
               (or res (or (.contains (string/lower-case title) w))))
             false
@@ -36,15 +37,16 @@
 
 (defn match-criteria
   "Matches criteria with news"
-  [criteria url]
+  [theme url]
   (let [attrs (getAttrs url)]
-    (if (criteria (get attrs "title"))
+    (if (isNewsMatched? (get attrs "title")
+                        ((keyword theme) word/words-map))
       {:url (get attrs "url") :title (get attrs "title")}
       {})))
 
 
 (defn waitForFutures
-  "Returns vector of realized futures"
+  "Returns vector of realized futures similar to wait for threads"
   [fColl]
   (while (= false (reduce (fn [r f] (and r (realized? f))) [] fColl))
     (do (Thread/sleep 100)))
@@ -54,6 +56,8 @@
 (defn -main
   "Filter Hacker News articles for FP"
   [& args]
-  (let [count (Integer/parseInt (first args))
-        res (map  (fn [url] (future (match-criteria isFunNews? url))) (fetchTopUrls count))]
-    (filter #(not (empty? %)) (waitForFutures res))))
+  (time (let [count (Integer/parseInt (first args))
+        theme (if (empty? (rest args)) "functional"
+                 (first (rest args)))
+        res (map  (fn [url] (future (match-criteria theme url))) (fetchTopUrls count))]
+    (filter #(not (empty? %)) (waitForFutures res)))))
